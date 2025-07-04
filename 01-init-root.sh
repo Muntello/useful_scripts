@@ -3,17 +3,18 @@
 # This script should be run as root
 # Usage: Run this script on a fresh Ubuntu server to set up a new user with SSH access
 # Ensure you have the public SSH key ready to be added for the new user
-# To copy this script to your server, you can use: scp 01-init-root.sh root@your.server.ip:/root/01-init-root.sh
+# To copy this script to your server, you can use: scp 01-init-root.sh root@<server-ip>:/root/01-init-root.sh
 # After copying chmod +x /root/01-init-root.sh
 # Then run it /root/01-init-root.sh
-# Then use ssh -i ~/.ssh/<keyname> muntello@<server-ip>
+# Then use ssh -i ~/.ssh/<keyname> example-user@<server-ip>
 set -e
 
-NEW_USER="muntello"
+NEW_USER="example-user"
 USER_HOME="/home/$NEW_USER"
 
 # Public SSH key for the new user
-PUBLIC_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDFo95zsvss7rrMeUu9capQ6TfPN7xWjgWcV0TXXKYiZ"
+# IMPORTANT: Replace this with your actual public SSH key!
+PUBLIC_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... # <-- Replace with your public key"
 
 echo "[*] Creating user: $NEW_USER"
 adduser --disabled-password --gecos "" "$NEW_USER"
