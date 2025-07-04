@@ -40,4 +40,17 @@ chmod 440 "/etc/sudoers.d/90-$NEW_USER"
 echo "[*] Restarting SSH service"
 systemctl restart ssh
 
+echo "💾 Enabling 1GB swap..."
+
+if [ ! -f /swapfile ]; then
+  fallocate -l 1G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | tee -a /etc/fstab
+  echo "✅ Swap created and enabled"
+else
+  echo "⚠️  Swap file already exists, skipping"
+fi
+
 echo "[+] Done! Try logging in as: ssh $NEW_USER@your.server.ip"
