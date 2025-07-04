@@ -34,6 +34,9 @@ set -e
 
 cd "$(dirname "$0")" || exit 1
 
+# Load Go into PATH
+export PATH=$PATH:/usr/local/go/bin
+
 echo "[*] Pulling latest code..."
 git pull origin main
 
@@ -47,6 +50,35 @@ echo "[+] Deploy complete!"
 EOF
 
 chmod +x "$APP_DIR/deploy.sh"
+
+echo "🔨 Building the application for the first time..."
+cd "$APP_DIR"
+echo "Current directory: $(pwd)"
+echo "Files in directory:"
+ls -la
+
+# Load Go into PATH
+export PATH=$PATH:/usr/local/go/bin
+echo "Go version: $(go version)"
+
+# Check if main.go exists
+if [ ! -f "main.go" ]; then
+  echo "❌ Error: main.go not found in the repository!"
+  echo "Available files:"
+  find . -name "*.go" -type f
+  exit 1
+fi
+
+# Build the application
+echo "Building Go application..."
+go build -o "$APP_BIN" main.go
+
+if [ ! -f "$APP_BIN" ]; then
+  echo "❌ Error: Failed to build the application!"
+  exit 1
+fi
+
+echo "✅ Application built successfully at $APP_BIN"
 
 echo "🛠 Creating systemd service..."
 sudo tee /etc/systemd/system/app.service > /dev/null <<EOF
