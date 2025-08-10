@@ -1,0 +1,32 @@
+#!/bin/bash
+# Lightweight pre-commit hook to prevent committing obvious secrets.
+set -Eeuo pipefail
+
+PATTERNS=(
+  '-----BEGIN RSA PRIVATE KEY-----'
+  '-----BEGIN OPENSSH PRIVATE KEY-----'
+  '-----BEGIN EC PRIVATE KEY-----'
+  'aws_secret_access_key'
+  'aws_access_key_id'
+  'password\s*='
+  'secret\s*='
+  'token\s*='
+)
+
+files=$(git diff --cached --name-only --diff-filter=ACMRT | tr '\n' ' ')
+if [ -z "$files" ]; then
+  exit 0
+fi
+
+for pat in "${PATTERNS[@]}"; do
+  if git grep -IEn "$pat" -- $files >/tmp/precommit_hits.txt 2>/dev/null; then
+    echo "[x] Pre-commit blocked. Pattern matched: $pat" 1>&2
+    cat /tmp/precommit_hits.txt 1>&2 || true
+    rm -f /tmp/precommit_hits.txt
+    exit 1
+  fi
+done
+
+rm -f /tmp/precommit_hits.txt || true
+exit 0
+

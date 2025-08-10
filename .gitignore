@@ -144,6 +144,36 @@ ENV/
 env.bak/
 venv.bak/
 
+# Secrets and keys (prevent committing sensitive data)
+.ssh/
+id_rsa
+id_rsa*
+id_ecdsa
+id_ecdsa*
+id_ed25519
+id_ed25519*
+*.pem
+*.key
+*.p12
+*.pfx
+*.kdb
+*.jks
+*.keystore
+secrets/
+.env.*
+*.tfstate
+*.tfstate.backup
+*.bak
+*.backup
+*.swp
+*.swo
+*.log
+*.err
+
+# Local binaries and artifacts
+app
+bin/
+
 # Spyder project settings
 .spyderproject
 .spyproject

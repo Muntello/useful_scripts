@@ -1,7 +1,25 @@
 # useful_scripts
-Useful scripts for server deployment and automation
+Useful scripts for server deployment and automation. Unified Bash style with shared helpers and safeguards against committing secrets.
 
 ## Scripts
+
+### 06-n8n-bootstrap.sh
+Secure, idempotent one‑shot installer for n8n on Ubuntu 22.04/24.04. Provisions Docker, PostgreSQL, Caddy (auto‑HTTPS), firewall, fail2ban, and optional CrowdSec.
+
+Usage (on a fresh VM):
+```bash
+# Edit config at the top: DOMAIN, EMAIL, optional NEW_USER & SSH key
+sudo bash ./06-n8n-bootstrap.sh
+# If prompted for reboot, re-run the same command afterwards
+```
+
+### 05-scan-secrets.sh
+Local scanner to detect obvious secrets in the repo before commit. Exits non‑zero if patterns are found.
+
+Usage:
+```bash
+./05-scan-secrets.sh
+```
 
 ### 01-init-root.sh
 Script for initial Ubuntu server setup. Must be run as root.
@@ -35,7 +53,11 @@ Script for initial Ubuntu server setup. Must be run as root.
    ssh example-user@your.server.ip
    ```
 
-**Important:** Make sure you have the SSH private key corresponding to the public key in the script before running it.
+**Important:** Export your public key before running or edit the variable in the script:
+```bash
+export PUBLIC_KEY="$(cat ~/.ssh/id_ed25519.pub)"
+```
+Ensure you have the matching private key locally to connect after setup.
 
 ### 02-setup-environment.sh
 Script for setting up the development and production environment on Ubuntu server. Should be run as a regular user (not root) after completing the initial setup with `01-init-root.sh`.
@@ -181,3 +203,15 @@ Before running the script, update these variables:
 - Check SSL certificate: `sudo certbot certificates`
 
 **Note:** Make sure your domain's DNS A record points to your server's IP address before running this script, as SSL certificate verification requires domain accessibility.
+
+## Shared Library
+Common helpers live in `lib/common.sh` and are sourced by all scripts. It provides consistent logging, privilege checks, apt wrapper, and safe file edits.
+
+## Preventing Sensitive Data in Git
+- A lightweight pre-commit hook is included at `hooks/pre-commit`. Install it with:
+  ```bash
+  ln -s ../../hooks/pre-commit .git/hooks/pre-commit
+  chmod +x hooks/pre-commit
+  ```
+- Run `./05-scan-secrets.sh` manually to scan the tree.
+- `.gitignore` blocks private keys, env files, and common secret artifacts by default.

@@ -1,8 +1,15 @@
 #!/bin/bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
 # Before running this script, ensure you have:
 # 1. A valid SSH key added to your GitHub account.
 # 2. The SSH key is stored at $HOME/.ssh/github_actions_key.
-set -e
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+require_not_root
 
 # Path to the directory where the repo will be cloned
 APP_DIR="$HOME/app-src"
@@ -16,18 +23,18 @@ REPO_SSH="git@github.com:YourUsername/your-repo.git"  # Replace with your reposi
 # Deploy key path
 DEPLOY_KEY="$HOME/.ssh/github_actions_key"
 
-echo "📦 Installing dependencies for Go build (gcc, stdlib.h)..."
+info "Installing dependencies for Go build (gcc, stdlib.h)..."
 sudo apt update
 sudo apt install -y build-essential
 
-echo "🐙 Cloning the application repository..."
+info "Cloning the application repository..."
 if [ ! -d "$APP_DIR" ]; then
   GIT_SSH_COMMAND="ssh -i $DEPLOY_KEY -o IdentitiesOnly=yes" git clone "$REPO_SSH" "$APP_DIR"
 else
-  echo "⚠️  Repository already exists at $APP_DIR — skipping clone."
+  warn "Repository already exists at $APP_DIR — skipping clone."
 fi
 
-echo "📁 Creating deploy.sh script..."
+info "Creating deploy.sh script..."
 cat <<'EOF' > "$APP_DIR/deploy.sh"
 #!/bin/bash
 set -e
@@ -51,7 +58,7 @@ EOF
 
 chmod +x "$APP_DIR/deploy.sh"
 
-echo "🔨 Building the application for the first time..."
+info "Building the application for the first time..."
 cd "$APP_DIR"
 echo "Current directory: $(pwd)"
 echo "Files in directory:"
@@ -63,7 +70,7 @@ echo "Go version: $(go version)"
 
 # Check if main.go exists
 if [ ! -f "main.go" ]; then
-  echo "❌ Error: main.go not found in the repository!"
+  error "main.go not found in the repository!"
   echo "Available files:"
   find . -name "*.go" -type f
   exit 1
@@ -74,13 +81,13 @@ echo "Building Go application..."
 go build -o "$APP_BIN" main.go
 
 if [ ! -f "$APP_BIN" ]; then
-  echo "❌ Error: Failed to build the application!"
+  error "Failed to build the application!"
   exit 1
 fi
 
-echo "✅ Application built successfully at $APP_BIN"
+log "Application built successfully at $APP_BIN"
 
-echo "🛠 Creating systemd service..."
+info "Creating systemd service..."
 sudo tee /etc/systemd/system/app.service > /dev/null <<EOF
 [Unit]
 Description=Go web app
@@ -99,13 +106,13 @@ StandardError=append:/var/log/app.err
 WantedBy=multi-user.target
 EOF
 
-echo "🚀 Enabling and starting systemd service..."
+info "Enabling and starting systemd service..."
 sudo systemctl daemon-reexec
 sudo systemctl daemon-reload
 sudo systemctl enable --now app
 
 echo ""
-echo "✅ Setup complete!"
+log "Setup complete!"
 echo "Application source:    $APP_DIR"
 echo "Compiled binary path:  $APP_BIN"
 echo "Deploy script:         $APP_DIR/deploy.sh"

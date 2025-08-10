@@ -1,5 +1,11 @@
 #!/bin/bash
-set -e
+set -Eeuo pipefail
+IFS=$'\n\t'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+. "$SCRIPT_DIR/lib/common.sh"
+
+require_not_root
 
 # --- Configuration ---
 
@@ -8,13 +14,13 @@ APP_PORT="8080"   # ← Port your Go app listens on
 
 # --- Install dependencies ---
 
-echo "🌐 Installing Nginx and Certbot..."
+info "Installing Nginx and Certbot..."
 sudo apt update
 sudo apt install -y nginx certbot python3-certbot-nginx
 
 # --- Configure Nginx ---
 
-echo "📝 Creating Nginx config for $DOMAIN..."
+info "Creating Nginx config for $DOMAIN..."
 
 NGINX_CONF="/etc/nginx/sites-available/$DOMAIN"
 
@@ -37,17 +43,17 @@ EOF
 # Enable the site
 sudo ln -sf "$NGINX_CONF" "/etc/nginx/sites-enabled/$DOMAIN"
 
-echo "🔄 Reloading Nginx to apply config..."
+info "Reloading Nginx to apply config..."
 sudo nginx -t
 sudo systemctl reload nginx
 
 # --- Obtain SSL cert + enable redirect ---
 
-echo "🔐 Requesting SSL certificate for $DOMAIN with redirect..."
+info "Requesting SSL certificate for $DOMAIN with redirect..."
 sudo certbot --nginx --redirect --non-interactive --agree-tos -m your-email@example.com -d "$DOMAIN"
 
 # --- Enable auto-renewal (already done by Certbot with systemd) ---
 
 echo ""
-echo "✅ HTTPS is enabled with automatic redirection from HTTP."
+log "HTTPS is enabled with automatic redirection from HTTP."
 echo "You can test with: curl -I http://$DOMAIN"
