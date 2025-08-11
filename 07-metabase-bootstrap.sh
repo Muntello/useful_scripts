@@ -41,7 +41,7 @@ EMAIL="admin@example.com"         # REQUIRED: email for Let’s Encrypt and noti
 
 # Optional: create a non-root sudo user and provision their SSH key
 CREATE_NEW_USER=true
-NEW_USER="deploy"
+NEW_USER="metabase"
 NEW_USER_SSH_PUBLIC_KEY="ssh-ed25519 AAAA...REPLACE_WITH_YOUR_KEY"        # paste your SSH pubkey here (ssh-ed25519 ...)
 
 # SSH hardening
@@ -57,13 +57,13 @@ SSH_CONFIRM_PORT=""               # empty = use SSH_PORT in message
 
 # Metabase settings
 MB_VERSION="latest"               # or pin e.g. "v0.48.12"
-TZ="Etc/UTC"
+TZ="America/New_York"
 MB_DATA_DIR="/opt/metabase"
 SITE_URL="https://$DOMAIN/"       # used by Metabase for links/emails
 
 # Proxy protection (front door)
-BASIC_AUTH_ENABLE=true
-BASIC_AUTH_USER="admin"
+BASIC_AUTH_ENABLE=false
+BASIC_AUTH_USER="metabase_basic_auth"
 BASIC_AUTH_PASSWORD="changeMe"    # if left default/empty, a strong random will be generated
 BASIC_AUTH_SECRETS_FILE="/root/metabase_basic_auth.txt"  # saved with 600 perms
 
@@ -159,6 +159,25 @@ step_10_user() {
       chmod 600 "$ssh_dir/authorized_keys"; chown "$NEW_USER:$NEW_USER" "$ssh_dir/authorized_keys"
     else
       warn "NEW_USER_SSH_PUBLIC_KEY is empty — add your key before disabling password auth."
+    fi
+    # Ensure passwordless sudo for the deployment user (validated with visudo)
+    if id -u "$NEW_USER" >/dev/null 2>&1; then
+      local sudoers_tmp="/tmp/${NEW_USER}-nopasswd"
+      local sudoers_file="/etc/sudoers.d/metabase"
+      echo "$NEW_USER ALL=(ALL) NOPASSWD:ALL" > "$sudoers_tmp"
+      chmod 0440 "$sudoers_tmp"
+      if command -v visudo >/dev/null 2>&1; then
+        if visudo -cf "$sudoers_tmp"; then
+          install -m 0440 "$sudoers_tmp" "$sudoers_file"
+          success "Passwordless sudo granted to $NEW_USER via $sudoers_file"
+        else
+          warn "visudo validation failed; not installing $sudoers_tmp"
+        fi
+      else
+        install -m 0440 "$sudoers_tmp" "$sudoers_file"
+        warn "visudo not found; installed $sudoers_file without validation"
+      fi
+      rm -f "$sudoers_tmp" || true
     fi
   else
     info "CREATE_NEW_USER=false — skipping user creation"

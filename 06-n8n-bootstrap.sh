@@ -158,6 +158,25 @@ step_10_user() {
     else
       warn "NEW_USER_SSH_PUBLIC_KEY is empty — add your key before disabling password auth."
     fi
+    # Ensure passwordless sudo for the deployment user (validated with visudo)
+    if id -u "$NEW_USER" >/dev/null 2>&1; then
+      local sudoers_tmp="/tmp/${NEW_USER}-nopasswd"
+      local sudoers_file="/etc/sudoers.d/n8n"
+      echo "$NEW_USER ALL=(ALL) NOPASSWD:ALL" > "$sudoers_tmp"
+      chmod 0440 "$sudoers_tmp"
+      if command -v visudo >/dev/null 2>&1; then
+        if visudo -cf "$sudoers_tmp"; then
+          install -m 0440 "$sudoers_tmp" "$sudoers_file"
+          success "Passwordless sudo granted to $NEW_USER via $sudoers_file"
+        else
+          warn "visudo validation failed; not installing $sudoers_tmp"
+        fi
+      else
+        install -m 0440 "$sudoers_tmp" "$sudoers_file"
+        warn "visudo not found; installed $sudoers_file without validation"
+      fi
+      rm -f "$sudoers_tmp" || true
+    fi
   else
     info "CREATE_NEW_USER=false — skipping user creation"
   fi
