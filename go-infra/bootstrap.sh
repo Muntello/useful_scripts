@@ -77,7 +77,13 @@ hardening_ssh() {
   sed -i "s/^#\?Port .*/Port $SSH_PORT/" /etc/ssh/sshd_config
   sed -i "s/^#\?PasswordAuthentication .*/PasswordAuthentication no/" /etc/ssh/sshd_config
   sed -i "s/^#\?PermitRootLogin .*/PermitRootLogin no/" /etc/ssh/sshd_config
-  systemctl restart sshd
+  if systemctl restart ssh 2>/dev/null; then
+    :
+  elif systemctl restart sshd 2>/dev/null; then
+    :
+  else
+    warn "SSH service not found (ssh/sshd)."
+  fi
 }
 
 setup_packages() {
@@ -87,6 +93,7 @@ setup_packages() {
 
   log "Installing core packages"
   apt_install ca-certificates curl git unzip software-properties-common gnupg
+  apt_install openssh-server
   apt_install nginx ufw
   # TLS issuance
   apt_install certbot python3-certbot-nginx
@@ -112,9 +119,15 @@ install_alloy() {
   curl -fsSL https://apt.grafana.com/gpg.key | gpg --dearmor >/usr/share/keyrings/grafana.gpg
   echo "deb [signed-by=/usr/share/keyrings/grafana.gpg] https://apt.grafana.com stable main" >/etc/apt/sources.list.d/grafana.list
   apt-get update -y
-  apt_install grafana-alloy || warn "Failed to install grafana-alloy; check repo connectivity."
+  # Package name may be 'alloy' on newer Ubuntu; try both
+  if ! apt_install alloy; then
+    if ! apt_install grafana-alloy; then
+      warn "Failed to install Grafana Alloy package (alloy/grafana-alloy). Skipping install."
+    fi
+  fi
 
   # Place a skeleton config (disabled by default until edited)
+  install -d -m 0755 -o root -g root /etc/alloy || true
   if [[ ! -f /etc/alloy/config.alloy ]]; then
     cat >/etc/alloy/config.alloy <<'ALLOY'
 // Example Alloy config. Edit and enable service after configuring.
@@ -129,6 +142,8 @@ install_alloy() {
 // }
 ALLOY
   fi
+  # Try to disable service until configured; service name may vary
+  systemctl disable alloy || true
   systemctl disable grafana-alloy || true
 }
 
