@@ -22,6 +22,11 @@ ADMIN_NOPASSWD_SUDO="yes"  # yes => NOPASSWD:ALL, no => need password
 CERTBOT_EMAIL=""            # REQUIRED for HTTPS issuance (e.g., admin@example.com)
 CERTBOT_STAGING="no"        # yes to use Let's Encrypt staging during tests
 
+# Grafana Cloud Loki (Alloy) — set to auto-configure log shipping
+LOKI_ENDPOINT=""            # e.g., https://logs-prod-036.grafana.net/loki/api/v1/push
+LOKI_USER=""                # e.g., your Stack ID (digits)
+LOKI_TOKEN=""               # Access Policy token with logs:write
+
 # Infra directories (owned by ADMIN_USER)
 ETC_DIR="/etc/go-infra"
 PROJECTS_DIR="$ETC_DIR/projects.d"
@@ -127,19 +132,51 @@ install_alloy() {
 
   # Place a skeleton config (disabled by default until edited)
   install -d -m 0755 -o root -g root /etc/alloy || true
-  if [[ ! -f /etc/alloy/config.alloy ]]; then
-    cat >/etc/alloy/config.alloy <<'ALLOY'
-// Example Alloy config. Edit and enable service after configuring.
-// Loki client example (uncomment and set endpoint/token):
-// loki.write "default" {
-//   endpoint { url = "https://logs-prod-xxx.grafana.net/loki/api/v1/push" }
-//   basic_auth { username = "<id>" password = "<token>" }
-// }
-// filelog "nginx" {
-//   targets = [ { __path__ = "/var/log/*/*.log" } ]
-//   forward_to = [loki.write.default.receiver]
+  if [[ -n "$LOKI_ENDPOINT" && -n "$LOKI_USER" && -n "$LOKI_TOKEN" ]]; then
+    log "Writing Alloy config for Grafana Cloud Loki"
+    cat >/etc/alloy/config.alloy <<ALLOY
+loki.write "grafanacloud" {
+  endpoint {
+    url = "$LOKI_ENDPOINT"
+    basic_auth {
+      username = "$LOKI_USER"
+      password = "$LOKI_TOKEN"
+    }
+  }
+}
+
+# Basic system logs; extend as needed
+loki.source.file "system_logs" {
+  targets = [
+    { __path__ = "/var/log/syslog",   job = "syslog" },
+    { __path__ = "/var/log/auth.log", job = "auth" },
+    { __path__ = "/var/log/kern.log", job = "kernel" },
+  ]
+  forward_to = [loki.write.grafanacloud.receiver]
+}
+ALLOY
+    # Ensure Alloy can read config
+    chgrp alloy /etc/alloy/config.alloy 2>/dev/null || true
+    chmod 0640 /etc/alloy/config.alloy
+  else
+    if [[ ! -f /etc/alloy/config.alloy ]]; then
+      cat >/etc/alloy/config.alloy <<'ALLOY'
+// Example Alloy config for Grafana Cloud Loki
+// Fill LOKI_ENDPOINT/LOKI_USER/LOKI_TOKEN in bootstrap config and rerun, or edit below.
+loki.write "grafanacloud" {
+  endpoint {
+    url = "https://logs-prod-xxx.grafana.net/loki/api/v1/push"
+    basic_auth { username = "<stack_id>" password = "<token>" }
+  }
+}
+// loki.source.file "system_logs" {
+//   targets = [ { __path__ = "/var/log/syslog", job = "syslog" } ]
+//   forward_to = [loki.write.grafanacloud.receiver]
 // }
 ALLOY
+      chgrp alloy /etc/alloy/config.alloy 2>/dev/null || true
+      chmod 0640 /etc/alloy/config.alloy
+    fi
   fi
   # Ensure service environment points to the config path expected by the unit
   if [[ ! -f /etc/default/alloy ]]; then
@@ -155,10 +192,28 @@ ENV
   install -d -m 0755 -o root -g root /var/lib/alloy/data
   if id -u alloy >/dev/null 2>&1; then
     chown -R alloy:alloy /var/lib/alloy
+    # Allow reading system log files (Ubuntu: group 'adm' reads /var/log)
+    usermod -a -G adm alloy || true
+    # Optionally read journald (uncomment journal source in config if needed)
+    usermod -a -G systemd-journal alloy || true
   fi
   # Try to disable service until configured; service name may vary
   systemctl disable alloy || true
   systemctl disable grafana-alloy || true
+
+  # Auto-enable if credentials provided
+  if [[ -n "$LOKI_ENDPOINT" && -n "$LOKI_USER" && -n "$LOKI_TOKEN" ]]; then
+    systemctl daemon-reload
+    if systemctl enable --now alloy 2>/dev/null; then
+      log "Alloy service enabled and started"
+    elif systemctl enable --now grafana-alloy 2>/dev/null; then
+      log "Grafana-Alloy service enabled and started"
+    else
+      warn "Failed to start Alloy service; check unit name and config"
+    fi
+  else
+    warn "Alloy left disabled (LOKI_* variables not set)."
+  fi
 }
 
 configure_firewall() {
