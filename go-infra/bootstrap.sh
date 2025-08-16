@@ -114,16 +114,15 @@ configure_nginx() {
 
 install_alloy() {
   log "Installing Grafana Alloy"
-  # Repo setup per Grafana docs
-  install -d -m 0755 -o root -g root /usr/share/keyrings
-  curl -fsSL https://apt.grafana.com/gpg.key | gpg --dearmor >/usr/share/keyrings/grafana.gpg
-  echo "deb [signed-by=/usr/share/keyrings/grafana.gpg] https://apt.grafana.com stable main" >/etc/apt/sources.list.d/grafana.list
+  # Repo setup per Grafana docs (Ubuntu 24.04+ convention)
+  install -d -m 0755 -o root -g root /etc/apt/keyrings
+  curl -fsSL https://apt.grafana.com/gpg.key | gpg --dearmor >/etc/apt/keyrings/grafana.gpg
+  echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" >/etc/apt/sources.list.d/grafana.list
   apt-get update -y
-  # Package name may be 'alloy' on newer Ubuntu; try both
+  # Install Alloy (preferred package name); fallback to grafana-alloy if needed
   if ! apt_install alloy; then
-    if ! apt_install grafana-alloy; then
-      warn "Failed to install Grafana Alloy package (alloy/grafana-alloy). Skipping install."
-    fi
+    warn "Package 'alloy' not found, trying 'grafana-alloy'"
+    apt_install grafana-alloy || warn "Failed to install Grafana Alloy package."
   fi
 
   # Place a skeleton config (disabled by default until edited)
@@ -141,6 +140,21 @@ install_alloy() {
 //   forward_to = [loki.write.default.receiver]
 // }
 ALLOY
+  fi
+  # Ensure service environment points to the config path expected by the unit
+  if [[ ! -f /etc/default/alloy ]]; then
+    cat >/etc/default/alloy <<ENV
+# Environment for Grafana Alloy service
+# Path to River config file
+CONFIG_FILE=/etc/alloy/config.alloy
+# Extra CLI args (optional)
+CUSTOM_ARGS=
+ENV
+  fi
+  # Ensure storage path exists with appropriate ownership
+  install -d -m 0755 -o root -g root /var/lib/alloy/data
+  if id -u alloy >/dev/null 2>&1; then
+    chown -R alloy:alloy /var/lib/alloy
   fi
   # Try to disable service until configured; service name may vary
   systemctl disable alloy || true
