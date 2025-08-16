@@ -145,7 +145,7 @@ loki.write "grafanacloud" {
   }
 }
 
-# Basic system logs; extend as needed
+// Basic system logs; extend as needed
 loki.source.file "system_logs" {
   targets = [
     { __path__ = "/var/log/syslog",   job = "syslog" },
